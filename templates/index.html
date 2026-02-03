@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Жуки Legacy</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        /* Адаптация под темную тему Телеграма */
+        body {
+            background-color: var(--tg-theme-bg-color, #212121);
+            color: var(--tg-theme-text-color, #ffffff);
+            font-family: sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            display: flex; 
+            flex-direction: column; 
+            min-height: 90vh;
+        }
+        .card {
+            background-color: var(--tg-theme-secondary-bg-color, #333);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .beetle-avatar {
+            font-size: 80px;
+            margin: 10px 0;
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            text-align: left;
+        }
+        button {
+            background-color: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            padding: 15px;
+            width: 100%;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            margin-top: 10px;
+            cursor: pointer;
+        }
+        button:active { opacity: 0.8; }
+        .btn-secondary {
+            background-color: transparent;
+            border: 2px solid var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-text-color, #ffffff);
+        }
+        #loading { font-size: 20px; color: #888; }
+        #game-ui { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="loading">Загрузка данных...</div>
+
+    <div id="game-ui">
+        <div class="card">
+            <h2 id="name">...</h2>
+            <div class="beetle-avatar">🪲</div>
+            <div>Уровень: <span id="lvl">1</span></div>
+        </div>
+
+        <div class="card stats-grid">
+            <div>💰 Багсы: <b id="money">0</b></div>
+            <div>🍖 Голод: <b id="hunger">0</b>%</div>
+            <div>💪 Сила: <b id="str">0</b></div>
+        </div>
+
+        <button onclick="sendAction('/api/feed')">🍖 Покормить (15$)</button>
+        <button class="btn-secondary" onclick="sendAction('/api/work')">⚒ Отправить на работу</button>
+        
+        <p id="msg" style="color: gray; margin-top: 15px; font-size: 14px;">...</p>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на весь экран
+
+        // Получаем данные юзера из Телеграма
+        // ВАЖНО: В продакшене нужно валидировать initData на сервере!
+        const user = tg.initDataUnsafe.user;
+        
+        if (!user) {
+            document.body.innerHTML = "<h1>Откройте игру через Telegram!</h1>";
+        } else {
+            initGame();
+        }
+
+        async function initGame() {
+            try {
+                const response = await fetch('/api/init', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        tg_id: user.id,
+                        username: user.username || "Anonymous"
+                    })
+                });
+                const data = await response.json();
+                renderState(data);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('game-ui').style.display = 'block';
+                
+                // Красим шапку приложения в цвет темы
+                tg.MainButton.setText("Магазин (Скоро)");
+                tg.MainButton.show();
+            } catch (e) {
+                alert("Ошибка соединения с сервером");
+            }
+        }
+
+        async function sendAction(endpoint) {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ tg_id: user.id })
+            });
+            const data = await response.json();
+            
+            if (data.status === 'error') {
+                tg.showAlert(data.message); // Нативный алерт телеграма
+            } else {
+                document.getElementById('msg').innerText = data.message;
+                renderState(data.state);
+                tg.HapticFeedback.impactOccurred('medium'); // Вибрация при успехе
+            }
+        }
+
+        function renderState(state) {
+            document.getElementById('name').innerText = state.name;
+            document.getElementById('money').innerText = state.money;
+            document.getElementById('hunger').innerText = state.hunger;
+            document.getElementById('str').innerText = state.strength;
+            document.getElementById('lvl').innerText = state.level;
+        }
+    </script>
+</body>
+</html>
