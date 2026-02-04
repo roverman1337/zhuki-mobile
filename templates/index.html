@@ -6,7 +6,6 @@
     <title>Жуки Legacy</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        /* Адаптация под темную тему Телеграма */
         body {
             background-color: var(--tg-theme-bg-color, #212121);
             color: var(--tg-theme-text-color, #ffffff);
@@ -25,22 +24,32 @@
             margin-bottom: 15px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
-        .beetle-avatar {
-            font-size: 80px;
-            margin: 10px 0;
-            animation: float 3s ease-in-out infinite;
+        
+        /* Стили для картинки жука */
+        .beetle-container {
+            display: flex;
+            justify-content: center;
+            margin: 15px 0;
         }
-        @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0px); }
+        .beetle-sprite {
+            width: 140px;
+            height: 140px;
+            /* Ссылка на иконку. Можно заменить на свою */
+            background-image: url('https://cdn-icons-png.flaticon.com/512/2926/2926210.png'); 
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
+
         .stats-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
             text-align: left;
+            font-size: 14px;
         }
+        
         button {
             background-color: var(--tg-theme-button-color, #3390ec);
             color: var(--tg-theme-button-text-color, #ffffff);
@@ -52,14 +61,34 @@
             font-weight: bold;
             margin-top: 10px;
             cursor: pointer;
+            transition: transform 0.1s;
         }
-        button:active { opacity: 0.8; }
+        button:active { transform: scale(0.95); opacity: 0.8; }
+        
         .btn-secondary {
             background-color: transparent;
             border: 2px solid var(--tg-theme-button-color, #3390ec);
             color: var(--tg-theme-text-color, #ffffff);
         }
-        #loading { font-size: 20px; color: #888; }
+        .btn-danger {
+            background-color: #e74c3c; /* Красный цвет для Арены */
+            color: white;
+        }
+
+        /* Блок лога */
+        #battle-log {
+            background: rgba(0,0,0,0.2); 
+            padding: 12px; 
+            border-radius: 8px; 
+            margin-top: 15px; 
+            text-align: left; 
+            font-size: 13px; 
+            line-height: 1.5;
+            display: none;
+            border-left: 4px solid #f1c40f;
+        }
+
+        #loading { font-size: 20px; color: #888; margin-top: 50px; }
         #game-ui { display: none; }
     </style>
 </head>
@@ -69,9 +98,12 @@
 
     <div id="game-ui">
         <div class="card">
-            <h2 id="name">...</h2>
-            <div class="beetle-avatar">🪲</div>
-            <div>Уровень: <span id="lvl">1</span></div>
+            <h2 id="name" style="margin:0;">...</h2>
+            <div style="font-size: 12px; color: #888;">Уровень <span id="lvl">1</span></div>
+            
+            <div class="beetle-container">
+                <div class="beetle-sprite"></div>
+            </div>
         </div>
 
         <div class="card stats-grid">
@@ -80,25 +112,30 @@
             <div>💪 Сила: <b id="str">0</b></div>
         </div>
 
-        <button onclick="sendAction('/api/feed')">🍖 Покормить (15$)</button>
-        <button class="btn-secondary" onclick="sendAction('/api/work')">⚒ Отправить на работу</button>
+        <div class="controls">
+            <button class="btn-danger" onclick="sendAction('/api/fight')">⚔️ АРЕНА (5$)</button>
+            <button onclick="sendAction('/api/feed')">🍖 Покормить (15$)</button>
+            <button class="btn-secondary" onclick="sendAction('/api/work')">⚒ Отправить на работу</button>
+        </div>
         
-        <p id="msg" style="color: gray; margin-top: 15px; font-size: 14px;">...</p>
+        <div id="battle-log"></div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Развернуть на весь экран
+        tg.expand(); 
 
-        // Получаем данные юзера из Телеграма
-        // ВАЖНО: В продакшене нужно валидировать initData на сервере!
         const user = tg.initDataUnsafe.user;
         
+        // Временная заглушка для тестов в браузере (если user не пришел)
+        // В продакшене лучше проверять !user и просить открыть в ТГ
+        const debugUser = user ? user : {id: 12345, username: "TestUser"};
+
         if (!user) {
-            document.body.innerHTML = "<h1>Откройте игру через Telegram!</h1>";
-        } else {
-            initGame();
+            console.log("Запущено вне Телеграма, использую тестового юзера");
         }
+
+        initGame();
 
         async function initGame() {
             try {
@@ -106,8 +143,8 @@
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        tg_id: user.id,
-                        username: user.username || "Anonymous"
+                        tg_id: debugUser.id,
+                        username: debugUser.username || "Anonymous"
                     })
                 });
                 const data = await response.json();
@@ -115,28 +152,64 @@
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('game-ui').style.display = 'block';
                 
-                // Красим шапку приложения в цвет темы
                 tg.MainButton.setText("Магазин (Скоро)");
                 tg.MainButton.show();
             } catch (e) {
-                alert("Ошибка соединения с сервером");
+                document.getElementById('loading').innerText = "Ошибка сервера :(";
             }
         }
 
         async function sendAction(endpoint) {
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ tg_id: user.id })
-            });
-            const data = await response.json();
-            
-            if (data.status === 'error') {
-                tg.showAlert(data.message); // Нативный алерт телеграма
-            } else {
-                document.getElementById('msg').innerText = data.message;
-                renderState(data.state);
-                tg.HapticFeedback.impactOccurred('medium'); // Вибрация при успехе
+            // Эффект нажатия на кнопку (визуальный)
+            const btn = document.querySelector(`button[onclick="sendAction('${endpoint}')"]`);
+            if(btn) {
+                btn.style.transform = "scale(0.95)";
+                setTimeout(() => btn.style.transform = "scale(1)", 100);
+            }
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ tg_id: debugUser.id })
+                });
+                const data = await response.json();
+                
+                if (data.status === 'error') {
+                    tg.showAlert(data.message);
+                } else {
+                    // Вибрация успеха
+                    tg.HapticFeedback.notificationOccurred('success');
+                    
+                    renderState(data.state);
+                    
+                    // Обработка лога
+                    const logDiv = document.getElementById('battle-log');
+                    logDiv.style.display = 'block';
+                    
+                    if (data.log && data.log.length > 0) {
+                        // Это был бой
+                        logDiv.innerHTML = `<b>⚔️ Хроника боя:</b><br>` + 
+                                           data.log.map(line => `• ${line}`).join('<br>') + 
+                                           `<br><br><b>Итог:</b> ${data.message}`;
+                    } else {
+                        // Обычное действие
+                        logDiv.innerHTML = data.message;
+                    }
+                    
+                    // Анимация жука
+                    const beetle = document.querySelector('.beetle-sprite');
+                    if (endpoint.includes('fight')) {
+                        // Рывок вправо при атаке
+                        beetle.style.transform = 'translateX(30px) rotate(10deg)';
+                    } else {
+                        // Увеличение при еде/работе
+                        beetle.style.transform = 'scale(1.1)';
+                    }
+                    setTimeout(() => beetle.style.transform = 'none', 200);
+                }
+            } catch (error) {
+                console.error(error);
             }
         }
 
